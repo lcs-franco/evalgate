@@ -16,9 +16,9 @@ def read_yaml(path: Path) -> Any:
         raise EvalgateConfigError(f"{path}: not valid YAML: {error}") from None
 
 
-def file_hash(path: Path) -> str:
+def file_content_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def config_error(path: Path, problems: list[str]) -> EvalgateConfigError:
+def config_error_for_file(path: Path, problems: list[str]) -> EvalgateConfigError:
     return EvalgateConfigError("\n".join(f"{path}: {problem}" for problem in problems))

@@ -3,41 +3,41 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from conftest import MakeFeature
-from fakes import ScriptedLLM, case, reply
+from conftest import CopyExampleFeature
+from fakes import ScriptedLLM, golden_case, model_reply
 
 from evalgate.run import run_feature
 
 
-def run(config: Path, llm: ScriptedLLM, out_dir: Path) -> dict[str, Any]:
+def run_and_read_record(config: Path, llm: ScriptedLLM, out_dir: Path) -> dict[str, Any]:
     record_path = run_feature(config, llm=llm, out_dir=out_dir)
     record: dict[str, Any] = json.loads(record_path.read_text())
     return record
 
 
 def test_run_writes_a_run_record_with_scores_and_pass_rates(
-    make_feature: MakeFeature, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    copy_example_feature: CopyExampleFeature, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("GITHUB_EVENT_PATH", raising=False)
     monkeypatch.setenv("GITHUB_SHA", "0123456789abcdef0123456789abcdef01234567")
     monkeypatch.setenv("GITHUB_HEAD_REF", "tweak-prompt")
-    config = make_feature(
+    config = copy_example_feature(
         [
-            case("b-1", "Double charge", "billing"),
-            case("b-2", "Refund please", "billing"),
-            case("t-1", "Export broken", "technical"),
+            golden_case("b-1", "Double charge", "billing"),
+            golden_case("b-2", "Refund please", "billing"),
+            golden_case("t-1", "Export broken", "technical"),
         ],
         model="model-from-config",
     )
     llm = ScriptedLLM(
         {
-            "Double charge": reply("billing", "Charged twice."),
-            "Refund please": reply("general"),
-            "Export broken": reply("technical"),
+            "Double charge": model_reply("billing", "Charged twice."),
+            "Refund please": model_reply("general"),
+            "Export broken": model_reply("technical"),
         }
     )
 
-    record = run(config, llm, tmp_path / "runs")
+    record = run_and_read_record(config, llm, tmp_path / "runs")
 
     assert record["feature"] == "support-email-classifier"
     assert record["prompt_version"] == "v1"
@@ -70,26 +70,26 @@ def test_run_writes_a_run_record_with_scores_and_pass_rates(
 
 
 def test_output_that_cannot_be_parsed_or_validated_fails_the_case_with_the_reason(
-    make_feature: MakeFeature, tmp_path: Path
+    copy_example_feature: CopyExampleFeature, tmp_path: Path
 ) -> None:
-    config = make_feature(
+    config = copy_example_feature(
         [
-            case("broken-json", "Broken json", "billing"),
-            case("bad-category", "Bad category", "billing"),
-            case("missing-field", "Missing field", "billing"),
-            case("fine", "Fine", "billing"),
+            golden_case("broken-json", "Broken json", "billing"),
+            golden_case("bad-category", "Bad category", "billing"),
+            golden_case("missing-field", "Missing field", "billing"),
+            golden_case("fine", "Fine", "billing"),
         ]
     )
     llm = ScriptedLLM(
         {
             "Broken json": "Sure! The category is billing.",
-            "Bad category": reply("refunds"),
+            "Bad category": model_reply("refunds"),
             "Missing field": '{"category": "billing"}',
-            "Fine": reply("billing"),
+            "Fine": model_reply("billing"),
         }
     )
 
-    record = run(config, llm, tmp_path / "runs")
+    record = run_and_read_record(config, llm, tmp_path / "runs")
 
     broken, bad_category, missing, fine = record["cases"]
     for failed in (broken, bad_category, missing):
@@ -108,12 +108,12 @@ def test_output_that_cannot_be_parsed_or_validated_fails_the_case_with_the_reaso
 
 
 def test_each_case_records_a_hash_of_its_expected_output_only(
-    make_feature: MakeFeature, tmp_path: Path
+    copy_example_feature: CopyExampleFeature, tmp_path: Path
 ) -> None:
-    config = make_feature(
+    config = copy_example_feature(
         [
-            case("a", "Alpha", "billing", summary="Same."),
-            case(
+            golden_case("a", "Alpha", "billing", summary="Same."),
+            golden_case(
                 "b",
                 "Beta",
                 "billing",
@@ -121,14 +121,21 @@ def test_each_case_records_a_hash_of_its_expected_output_only(
                 why="other note",
                 expected_difficulty="hard",
             ),
-            case("c", "Gamma", "billing", summary="Different."),
+            golden_case("c", "Gamma", "billing", summary="Different."),
         ]
     )
     llm = ScriptedLLM(
-        {"Alpha": reply("billing"), "Beta": reply("billing"), "Gamma": reply("billing")}
+        {
+            "Alpha": model_reply("billing"),
+            "Beta": model_reply("billing"),
+            "Gamma": model_reply("billing"),
+        }
     )
 
-    hashes = [c["expected_output_hash"] for c in run(config, llm, tmp_path / "runs")["cases"]]
+    hashes = [
+        c["expected_output_hash"]
+        for c in run_and_read_record(config, llm, tmp_path / "runs")["cases"]
+    ]
 
     # sha256 of the canonical JSON {"category":"billing","summary":"Same."}
     assert hashes[0] == "9993845eef887d0ff4adc3a77ff7ee629bf784c019b8bbb96d63e2d8507aef27"
@@ -137,15 +144,17 @@ def test_each_case_records_a_hash_of_its_expected_output_only(
 
 
 def test_a_run_on_a_pull_request_records_the_head_commit_not_the_merge_commit(
-    make_feature: MakeFeature, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    copy_example_feature: CopyExampleFeature, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     event = tmp_path / "event.json"
     event.write_text(json.dumps({"pull_request": {"head": {"sha": "head" + "0" * 36}}}))
     monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
     monkeypatch.setenv("GITHUB_SHA", "merge" + "0" * 35)
     monkeypatch.setenv("GITHUB_HEAD_REF", "tweak-prompt")
-    config = make_feature([case("b-1", "Double charge", "billing")])
+    config = copy_example_feature([golden_case("b-1", "Double charge", "billing")])
 
-    record = run(config, ScriptedLLM({"Double charge": reply("billing")}), tmp_path / "runs")
+    record = run_and_read_record(
+        config, ScriptedLLM({"Double charge": model_reply("billing")}), tmp_path / "runs"
+    )
 
     assert record["git"] == {"commit": "head" + "0" * 36, "branch": "tweak-prompt"}

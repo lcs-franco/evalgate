@@ -5,7 +5,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from evalgate.errors import InvalidOutputError, describe_validation_error
+from evalgate.errors import InvalidOutputError, validation_error_lines
 
 
 class Message(BaseModel):
@@ -25,19 +25,15 @@ class LLMRequest(BaseModel):
 
 
 class LLMResponse(BaseModel):
-    """What a provider returns: the raw output text, untouched, and what the call cost."""
-
     model_config = ConfigDict(frozen=True)
 
-    text: str
+    raw_text: str
     input_tokens: int
     output_tokens: int
     latency_ms: float
 
 
 class LLMClient(Protocol):
-    """The provider interface. Adapters hide how each provider asks for structured output."""
-
     async def complete(self, request: LLMRequest) -> LLMResponse: ...
 
 
@@ -50,11 +46,7 @@ class Usage:
 
 
 class StructuredLLM:
-    """What a feature under test talks to.
-
-    It fixes the model from configuration, validates the raw output against the requested type
-    and records usage, so every provider and every fake goes through the same validation.
-    """
+    """Validates here rather than in each provider, so adapters and fakes fail the same way."""
 
     def __init__(self, client: LLMClient, model: str) -> None:
         self._client = client
@@ -76,16 +68,17 @@ class StructuredLLM:
         self.usage.input_tokens += response.input_tokens
         self.usage.output_tokens += response.output_tokens
         self.usage.latency_ms += response.latency_ms
-        self.usage.last_raw_output = response.text
+        self.usage.last_raw_output = response.raw_text
 
         try:
-            data = json.loads(response.text)
+            parsed_json = json.loads(response.raw_text)
         except json.JSONDecodeError as error:
-            raise InvalidOutputError(f"output is not valid JSON: {error}", response.text) from None
+            reason = f"output is not valid JSON: {error}"
+            raise InvalidOutputError(reason, response.raw_text) from None
 
         try:
-            return output_type.model_validate(data)
+            return output_type.model_validate(parsed_json)
         except ValidationError as error:
-            problems = "; ".join(describe_validation_error(error))
+            problems = "; ".join(validation_error_lines(error))
             reason = f"output does not match {output_type.__name__}: {problems}"
-            raise InvalidOutputError(reason, response.text) from None
+            raise InvalidOutputError(reason, response.raw_text) from None

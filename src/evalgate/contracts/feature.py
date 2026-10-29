@@ -16,8 +16,6 @@ class FewShot(BaseModel):
 
 
 class PromptVersion(BaseModel):
-    """An immutable revision of a feature's prompt, loaded from `prompts/<id>.yaml`."""
-
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     id: str
@@ -28,8 +26,6 @@ class PromptVersion(BaseModel):
 
 @dataclass(frozen=True)
 class FeatureUnderTest[In: BaseModel, Out: BaseModel]:
-    """What a consumer exports so evalgate can evaluate its feature."""
-
     input_type: type[In]
     output_type: type[Out]
     run: Callable[[In, PromptVersion, StructuredLLM], Awaitable[Out]]

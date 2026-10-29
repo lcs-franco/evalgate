@@ -1,5 +1,3 @@
-"""The public contract between evalgate and a feature under test."""
-
 from evalgate.contracts.feature import FeatureUnderTest, FewShot, PromptVersion
 from evalgate.contracts.llm import LLMClient, LLMRequest, LLMResponse, Message, StructuredLLM
 from evalgate.errors import InvalidOutputError

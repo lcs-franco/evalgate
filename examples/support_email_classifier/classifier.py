@@ -1,8 +1,4 @@
-"""The example feature under test: a customer-support email classifier.
-
-It is wired up exactly as a feature in another repo would be: evalgate finds `feature` through
-`feature.yaml` and never imports this module by name.
-"""
+"""Consumed only through feature.yaml, exactly as a feature in another repo would be."""
 
 import json
 from typing import Literal

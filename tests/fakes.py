@@ -4,31 +4,42 @@ from typing import Any
 from evalgate.contracts import LLMRequest, LLMResponse
 
 
-def reply(category: str, summary: str = "A summary.") -> str:
+def model_reply(category: str, summary: str = "A summary.") -> str:
     return json.dumps({"category": category, "summary": summary})
 
 
 class ScriptedLLM:
-    """Returns a fixed raw output for each case, picked by a key found in the case's message."""
-
-    def __init__(self, script: dict[str, str], *, tokens: tuple[int, int] = (120, 30)) -> None:
-        self._script = script
-        self._tokens = tokens
+    def __init__(
+        self,
+        replies_by_message_snippet: dict[str, str],
+        *,
+        input_tokens: int = 120,
+        output_tokens: int = 30,
+    ) -> None:
+        self._replies_by_message_snippet = replies_by_message_snippet
+        self._input_tokens = input_tokens
+        self._output_tokens = output_tokens
 
     async def complete(self, request: LLMRequest) -> LLMResponse:
-        last_message = request.messages[-1].content
-        matches = [text for key, text in self._script.items() if key in last_message]
-        if len(matches) != 1:
-            raise AssertionError(f"script has {len(matches)} replies for: {last_message!r}")
+        case_message = request.messages[-1].content
+        matching_replies = [
+            reply
+            for snippet, reply in self._replies_by_message_snippet.items()
+            if snippet in case_message
+        ]
+
+        if len(matching_replies) != 1:
+            raise AssertionError(f"{len(matching_replies)} scripted replies for: {case_message!r}")
+
         return LLMResponse(
-            text=matches[0],
-            input_tokens=self._tokens[0],
-            output_tokens=self._tokens[1],
+            raw_text=matching_replies[0],
+            input_tokens=self._input_tokens,
+            output_tokens=self._output_tokens,
             latency_ms=42.0,
         )
 
 
-def case(
+def golden_case(
     case_id: str, subject: str, category: str, *, summary: str = "A summary.", **overrides: Any
 ) -> dict[str, Any]:
     return {

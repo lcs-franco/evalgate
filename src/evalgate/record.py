@@ -52,54 +52,68 @@ class RunRecord(BaseModel):
     totals: Totals
 
 
-def totals(cases: list[CaseResult]) -> Totals:
-    per_category: dict[str, list[bool]] = {}
+def compute_totals(cases: list[CaseResult]) -> Totals:
+    results_by_category: dict[str, list[bool]] = {}
+
     for case in cases:
-        per_category.setdefault(case.category, []).append(case.passed)
-    overall = _rate([case.passed for case in cases])
+        results_by_category.setdefault(case.category, []).append(case.passed)
+
+    overall = _pass_rate_of([case.passed for case in cases])
+
     return Totals(
         **overall.model_dump(),
-        per_category={category: _rate(results) for category, results in per_category.items()},
+        per_category={
+            category: _pass_rate_of(results) for category, results in results_by_category.items()
+        },
     )
 
 
-def _rate(results: list[bool]) -> CategoryTotals:
+def _pass_rate_of(results: list[bool]) -> CategoryTotals:
     passed = sum(results)
+
     return CategoryTotals(passed=passed, total=len(results), pass_rate=passed / len(results))
 
 
-def git_info(cwd: Path) -> GitInfo:
-    """Reads the commit and branch from GitHub Actions when set, since PR checkouts are detached.
-
-    On a pull request, both `GITHUB_SHA` and the checkout are GitHub's synthetic merge commit,
-    so the head commit is read from the event payload instead.
-    """
+def read_git_info(repo_dir: Path) -> GitInfo:
+    # On a pull request, GITHUB_SHA and the checkout are GitHub's synthetic merge commit,
+    # which exists nowhere in the repo, so the head commit comes from the event payload.
     commit = (
-        _pull_request_head_sha() or os.environ.get("GITHUB_SHA") or _git(cwd, "rev-parse", "HEAD")
+        _pull_request_head_sha()
+        or os.environ.get("GITHUB_SHA")
+        or _run_git(repo_dir, "rev-parse", "HEAD")
     )
+
     branch = (
         os.environ.get("GITHUB_HEAD_REF")
         or os.environ.get("GITHUB_REF_NAME")
-        or _git(cwd, "rev-parse", "--abbrev-ref", "HEAD")
+        or _run_git(repo_dir, "rev-parse", "--abbrev-ref", "HEAD")
     )
+
     return GitInfo(commit=commit, branch=branch)
 
 
 def _pull_request_head_sha() -> str | None:
     event_path = os.environ.get("GITHUB_EVENT_PATH")
+
     if not event_path:
         return None
+
     try:
-        event = json.loads(Path(event_path).read_text())
+        github_event = json.loads(Path(event_path).read_text())
     except (OSError, json.JSONDecodeError):
         return None
-    sha = event.get("pull_request", {}).get("head", {}).get("sha")
-    return sha if isinstance(sha, str) else None
+
+    head_sha = github_event.get("pull_request", {}).get("head", {}).get("sha")
+
+    return head_sha if isinstance(head_sha, str) else None
 
 
-def _git(cwd: Path, *args: str) -> str | None:
+def _run_git(repo_dir: Path, *args: str) -> str | None:
     try:
-        result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            ["git", *args], cwd=repo_dir, capture_output=True, text=True, check=True
+        )
     except (OSError, subprocess.CalledProcessError):
         return None
+
     return result.stdout.strip() or None

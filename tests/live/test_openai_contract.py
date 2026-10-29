@@ -1,5 +1,3 @@
-"""Contract test for the real OpenAI adapter. Costs money: run with `pytest -m live`."""
-
 import asyncio
 from pathlib import Path
 
@@ -32,7 +30,7 @@ def test_adapter_returns_raw_structured_output_with_tokens_and_latency() -> None
 
     response = asyncio.run(OpenAIClient().complete(request))
 
-    answer = Answer.model_validate_json(response.text)
+    answer = Answer.model_validate_json(response.raw_text)
     assert answer.country_code == "FR"
     assert response.input_tokens > 0
     assert response.output_tokens > 0

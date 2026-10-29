@@ -15,7 +15,6 @@ class ExactMatchConfig(BaseModel):
         return f"exact_match:{self.field}"
 
 
-# Becomes a discriminated union on `type` when more scorers exist.
 ScorerConfig = ExactMatchConfig
 
 

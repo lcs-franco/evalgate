@@ -10,12 +10,13 @@ from evalgate.run import run_feature
 
 app = typer.Typer(help="A regression gate for LLM-powered features.", no_args_is_help=True)
 
-CONFIG_ERROR = 2
+CONFIG_ERROR_EXIT_CODE = 2
 
 
+# Without a callback, Typer turns a lone command into the whole app and `evalgate run` breaks.
 @app.callback()
 def main() -> None:
-    """Keeps `run` a subcommand while it is the only one."""
+    pass
 
 
 @app.command()
@@ -25,16 +26,18 @@ def run(
 ) -> None:
     """Make a run of a feature under test over its golden dataset."""
     try:
-        llm = OpenAIClient()
+        openai_client = OpenAIClient()
     except openai.OpenAIError as error:
-        _fail(f"cannot create the OpenAI client: {error}")
+        _exit_with_config_error(f"cannot create the OpenAI client: {error}")
+
     try:
-        record_path = run_feature(config, llm=llm, out_dir=out_dir)
+        record_path = run_feature(config, llm=openai_client, out_dir=out_dir)
     except EvalgateConfigError as error:
-        _fail(str(error))
+        _exit_with_config_error(str(error))
+
     typer.echo(f"Run record written to {record_path}")
 
 
-def _fail(message: str) -> NoReturn:
+def _exit_with_config_error(message: str) -> NoReturn:
     typer.echo(f"error: {message}", err=True)
-    raise typer.Exit(CONFIG_ERROR)
+    raise typer.Exit(CONFIG_ERROR_EXIT_CODE)

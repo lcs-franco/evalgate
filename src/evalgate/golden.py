@@ -6,8 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from evalgate.errors import EvalgateConfigError, describe_validation_error
-from evalgate.files import file_hash, read_yaml
+from evalgate.errors import EvalgateConfigError, validation_error_lines
+from evalgate.files import file_content_hash, read_yaml
 
 
 class _RawCase(BaseModel):
@@ -44,41 +44,49 @@ def expected_output_hash(expected: BaseModel) -> str:
 def load_golden_dataset(
     path: Path, input_type: type[BaseModel], output_type: type[BaseModel]
 ) -> GoldenDataset:
-    """Loads and validates every case, reporting every problem at once."""
-    raw = read_yaml(path)
-    if not isinstance(raw, list) or not raw:
+    raw_cases = read_yaml(path)
+
+    if not isinstance(raw_cases, list) or not raw_cases:
         raise EvalgateConfigError(f"{path}: expected a non-empty list of cases")
 
     cases: list[Case] = []
     problems: list[str] = []
-    first_seen: dict[str, int] = {}
-    for number, entry in enumerate(raw, start=1):
-        label = f"case {number}"
-        if isinstance(entry, dict) and isinstance(entry.get("id"), str):
-            label = f"case {number} ({entry['id']!r})"
-        case_problems: list[str] = []
+    case_number_by_id: dict[str, int] = {}
+
+    for case_number, raw_entry in enumerate(raw_cases, start=1):
+        case_label = f"case {case_number}"
+
+        if isinstance(raw_entry, dict) and isinstance(raw_entry.get("id"), str):
+            case_label = f"case {case_number} ({raw_entry['id']!r})"
+
         try:
-            raw_case = _RawCase.model_validate(entry)
+            raw_case = _RawCase.model_validate(raw_entry)
         except ValidationError as error:
-            problems += [f"{label}: {line}" for line in describe_validation_error(error)]
+            problems += [f"{case_label}: {line}" for line in validation_error_lines(error)]
             continue
 
-        if raw_case.id in first_seen:
-            case_problems.append(f"duplicate id, already used by case {first_seen[raw_case.id]}")
+        case_problems: list[str] = []
+
+        if raw_case.id in case_number_by_id:
+            first_number = case_number_by_id[raw_case.id]
+            case_problems.append(f"duplicate id, already used by case {first_number}")
         else:
-            first_seen[raw_case.id] = number
+            case_number_by_id[raw_case.id] = case_number
+
         try:
             case_input = input_type.model_validate(raw_case.input)
         except ValidationError as error:
-            case_problems += describe_validation_error(error, "input")
+            case_problems += validation_error_lines(error, "input")
+
         try:
             expected = output_type.model_validate(raw_case.expected)
         except ValidationError as error:
-            case_problems += describe_validation_error(error, "expected")
+            case_problems += validation_error_lines(error, "expected")
 
         if case_problems:
-            problems += [f"{label}: {line}" for line in case_problems]
+            problems += [f"{case_label}: {problem}" for problem in case_problems]
             continue
+
         cases.append(
             Case(
                 id=raw_case.id,
@@ -91,8 +99,7 @@ def load_golden_dataset(
         )
 
     if problems:
-        raise EvalgateConfigError(
-            f"{path}: invalid golden dataset\n" + "\n".join(f"  - {line}" for line in problems)
-        )
-    version = file_hash(path)[:12]
-    return GoldenDataset(version=version, cases=cases)
+        problem_list = "\n".join(f"  - {problem}" for problem in problems)
+        raise EvalgateConfigError(f"{path}: invalid golden dataset\n{problem_list}")
+
+    return GoldenDataset(version=file_content_hash(path)[:12], cases=cases)

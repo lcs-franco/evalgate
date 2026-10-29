@@ -2,25 +2,23 @@ from pydantic import ValidationError
 
 
 class EvalgateConfigError(Exception):
-    """A feature configuration, prompt version or golden dataset is invalid.
-
-    The message is meant for the person who wrote the file, so it names the file and the problem.
-    """
+    pass
 
 
 class InvalidOutputError(Exception):
-    """The model output could not be parsed or validated against the feature's output type."""
-
-    def __init__(self, reason: str, raw: str) -> None:
+    def __init__(self, reason: str, raw_output: str) -> None:
         super().__init__(reason)
         self.reason = reason
-        self.raw = raw
+        self.raw_output = raw_output
 
 
-def describe_validation_error(error: ValidationError, prefix: str = "") -> list[str]:
-    """One line per problem, such as `expected.category: Input should be 'billing' or 'general'`."""
+def validation_error_lines(error: ValidationError, location_prefix: str = "") -> list[str]:
     lines = []
+
     for detail in error.errors():
-        location = ".".join(str(part) for part in (prefix, *detail["loc"]) if part != "")
+        location_parts = (location_prefix, *detail["loc"])
+        location = ".".join(str(part) for part in location_parts if part != "")
+
         lines.append(f"{location}: {detail['msg']}" if location else detail["msg"])
+
     return lines

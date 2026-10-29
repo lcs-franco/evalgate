@@ -1,0 +1,61 @@
+# Golden dataset for the support-email classifier.
+#
+# SEED PLACEHOLDERS: these five cases only exist to exercise the pipeline. They must be
+# replaced by hand-written cases (issue #3). Never generate cases with an LLM.
+#
+# Each case:
+#   id                   stable, unique, never reused (renaming a case makes it a new case)
+#   input                what the feature receives (subject, body)
+#   expected             the correct output: category and an ideal one-sentence summary
+#   expected_difficulty  easy | medium | hard
+#   why                  why this case matters, for whoever maintains the dataset
+
+- id: billing-001
+  input:
+    subject: Charged twice
+    body: My card was charged twice for the October invoice. Can you reverse one of them?
+  expected:
+    category: billing
+    summary: The customer was charged twice for October and wants one charge reversed.
+  expected_difficulty: easy
+  why: seed placeholder — replace in #3
+
+- id: technical-001
+  input:
+    subject: Export keeps failing
+    body: Every time I export a report to PDF the page spins and then shows error 500.
+  expected:
+    category: technical
+    summary: PDF report export fails with a server error.
+  expected_difficulty: easy
+  why: seed placeholder — replace in #3
+
+- id: account-001
+  input:
+    subject: Change account owner
+    body: Our admin left the company. How do we move the account to another email?
+  expected:
+    category: account
+    summary: The customer wants to transfer account ownership to a new email after the admin left.
+  expected_difficulty: medium
+  why: seed placeholder — replace in #3
+
+- id: general-001
+  input:
+    subject: Dark mode?
+    body: Love the app. Any plans to add a dark mode?
+  expected:
+    category: general
+    summary: The customer asks whether a dark mode is planned.
+  expected_difficulty: easy
+  why: seed placeholder — replace in #3
+
+- id: billing-002
+  input:
+    subject: App broken after upgrade
+    body: I upgraded to the annual plan yesterday and you charged me the monthly price instead.
+  expected:
+    category: billing
+    summary: The customer upgraded to annual but was charged the monthly price.
+  expected_difficulty: hard
+  why: seed placeholder — replace in #3 (subject suggests technical, body is billing)

@@ -1,0 +1,10 @@
+name: support-email-classifier
+entrypoint: classifier:feature
+prompt_version: v1
+model: gpt-6-luna
+golden_dataset: golden.yaml
+category_field: category
+scorers:
+  - type: exact_match
+    field: category
+    blocking: true
